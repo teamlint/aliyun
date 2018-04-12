@@ -1,7 +1,6 @@
 package message
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -82,18 +81,42 @@ func PhoneNumbers(nums []string) Param {
 	}}
 }
 
+// v.Set("SendDate", time.Now().UTC().Format("20160102"))
+// v.Set("PageSize", strconv.Itoa(10))
+// v.Set("CurrentPage", strconv.Itoa(1))
+
+// SendDate specifies the send date of the sms
+func SendDate(t time.Time) Param {
+	return Param{f: func(v url.Values) {
+		v.Set("SendDate", GenDatetime(t))
+	}}
+}
+
+// PageSize specifies qpagesize of query
+func PageSize(pageSize int) Param {
+	return Param{f: func(v url.Values) {
+		v.Set("PageSize", strconv.Itoa(pageSize))
+	}}
+}
+
+// CurrentPage specifies current page of query
+func CurrentPage(currentPage int) Param {
+	return Param{f: func(v url.Values) {
+		v.Set("CurrentPage", strconv.Itoa(currentPage))
+	}}
+}
+
 // GenTimestamp generates the timestamp for aliyun services.
 // aliyun requires GMT but not local time.
 func GenTimestamp(t time.Time) string {
 	gmt := t.UTC()
-	return fmt.Sprintf("%04d-%02d-%02dT%02d:%02d:%02dZ",
-		gmt.Year(),
-		gmt.Month(),
-		gmt.Day(),
-		gmt.Hour(),
-		gmt.Minute(),
-		gmt.Second(),
-	)
+	return gmt.Format("2006-01-02T15:04:05Z")
+}
+
+// GenDatetime generates the datetime for aliyun services.
+func GenDatetime(t time.Time) string {
+	gmt := t.UTC()
+	return gmt.Format("2006-01-02 15:04:05")
 }
 
 // GenPhoneNumbersStr generates the parameter string for one or more phone numbers.

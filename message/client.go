@@ -9,10 +9,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/northbright/uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 // Client is used to make HTTP requests of aliyun API message serviices.
@@ -39,6 +40,31 @@ type Response struct {
 type SMSResponse struct {
 	Response
 	BizID string `json:"BizId"`
+}
+
+// QuerySendDetailsResponse is the response of HTTP request of query details
+type QuerySendDetailsResponse struct {
+	Response
+	TotalCount        int                `json:"TotalCount"`
+	TotalPage         int                `json:"TotalPage"`
+	SMSSendDetailDTOs *SMSSendDetailDTOs `json:"SmsSendDetailDTOs"`
+}
+
+// SMSSendDetailDTOs
+type SMSSendDetailDTOs struct {
+	SMSSendDetailDTO []*SMSSendDetailDTO `json:"SmsSendDetailDTO"`
+}
+
+// SMSSendDetailDTO is the sms's end details
+type SMSSendDetailDTO struct {
+	PhoneNum     string `json:"PhoneNum"`
+	SendStatus   int    `json:"SendStatus"`
+	ErrCode      string `json:"ErrCode"`
+	TemplateCode string `json:"TemplateCode"`
+	Content      string `json:"Content"`
+	SendDate     string `json:"SendDate"`
+	ReceiveDate  string `json:"ReceiveDate"`
+	OutID        string `json:"OutId"`
 }
 
 // SingleCallByTTSResponse is the response of HTTP request of make single call by TTS.
@@ -77,8 +103,8 @@ func (c *Client) SetDefaultCommonParams(v url.Values) {
 	v.Set("Format", "JSON")
 	v.Set("SignatureMethod", "HMAC-SHA1")
 	v.Set("SignatureVersion", "1.0")
-	UUID, _ := uuid.New()
-	v.Set("SignatureNonce", UUID)
+	nonce := uuid.NewV4().String()
+	v.Set("SignatureNonce", nonce)
 }
 
 // SignedString follow aliyun's POP protocol to generate the signature.
@@ -258,4 +284,74 @@ func (c *Client) MakeSingleCallByTTS(calledShowNumber, calledNumber, ttsCode, tt
 		return false, response, nil
 	}
 	return true, response, nil
+}
+
+// QuerySendDetails query sms
+func (c *Client) QuerySendDetails(phoneNumber string, bizID string, params ...Param) (bool, *QuerySendDetailsResponse, error) {
+	v := url.Values{}
+	// Set default common parameters for aliyun services.
+	c.SetDefaultCommonParams(v)
+
+	// Set default business parameters for sending SMS.
+	v.Set("Action", "QuerySendDetails")
+	v.Set("Version", "2017-05-25")
+	v.Set("RegionId", "cn-hangzhou")
+
+	// Set required business parameters
+	v.Set("PhoneNumber", phoneNumber)
+	if bizID != "" {
+		v.Set("BizId", bizID)
+	}
+	v.Set("SendDate", time.Now().UTC().Format("20060102"))
+	v.Set("PageSize", strconv.Itoa(10))
+	v.Set("CurrentPage", strconv.Itoa(1))
+
+	// Override parameters if need.
+	for _, param := range params {
+		param.f(v)
+	}
+
+	// Get sorted query string by keys.
+	sortedQueryStr := v.Encode()
+
+	// Get signature.
+	sign := c.SignedString("GET", sortedQueryStr)
+
+	// Make final query string with signature.
+	rawQuery := fmt.Sprintf("Signature=%s&%s", sign, sortedQueryStr)
+
+	// New a URL with host, raw query.
+	u := &url.URL{
+		Scheme:   "http",
+		Host:     "dysmsapi.aliyuncs.com",
+		Path:     "/",
+		RawQuery: rawQuery,
+	}
+
+	// request
+	// fmt.Printf("http request: %v\n", u.String())
+	resp, err := http.Get(u.String())
+	if err != nil {
+		return false, nil, err
+	}
+	defer resp.Body.Close()
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, nil, err
+	}
+	// resonse
+	// fmt.Printf("http response: %v\n", string(buf))
+
+	// Parse JSON response
+	response := &QuerySendDetailsResponse{}
+	if err = json.Unmarshal(buf, response); err != nil {
+		return false, nil, err
+	}
+
+	if strings.ToUpper(response.Code) != "OK" {
+		return false, response, nil
+	}
+	return true, response, nil
+
 }
