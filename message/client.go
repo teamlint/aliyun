@@ -103,7 +103,8 @@ func (c *Client) SetDefaultCommonParams(v url.Values) {
 	v.Set("Format", "JSON")
 	v.Set("SignatureMethod", "HMAC-SHA1")
 	v.Set("SignatureVersion", "1.0")
-	nonce := uuid.NewV4().String()
+	id, _ := uuid.NewV4()
+	nonce := id.String()
 	v.Set("SignatureNonce", nonce)
 }
 
